@@ -1,2 +1,2 @@
-# rl-car-safety
+# RL Car Safety
 Model based caution for safe exploration
