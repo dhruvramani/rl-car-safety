@@ -590,7 +590,7 @@ class T2TGymEnv(T2TEnv):
 
   noop_action = 0
 
-  def __init__(self, base_env_name=None, batch_size=1, grayscale=False,
+  def __init__(self, env_fn, base_env_name=None, batch_size=1, grayscale=False,
                resize_height_factor=2, resize_width_factor=2,
                rl_env_max_episode_steps=-1, max_num_noops=0,
                maxskip_envs=False, sticky_actions=False,
@@ -610,13 +610,13 @@ class T2TGymEnv(T2TEnv):
     self.sticky_actions = sticky_actions
     self._initial_state = None
     self._initial_frames = None
+    self.env_fn = env_fn
     if not self.name:
       # Set problem name if not registered.
       self.name = "Gym%s" % base_env_name
 
     self._envs = [
-        gym_utils.make_gym_env(
-            base_env_name, rl_env_max_episode_steps=rl_env_max_episode_steps,
+        gym_utils.make_gym_env_fn(self.env_fn, base_env_name, rl_env_max_episode_steps=rl_env_max_episode_steps,
             maxskip_env=maxskip_envs, sticky_actions=sticky_actions)
         for _ in range(self.batch_size)]
 

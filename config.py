@@ -14,6 +14,8 @@ def argparser():
     parser = argparse.ArgumentParser("Model based safety",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    parser.add_argument('--train_world_model', type=str2bool, default=True)
+
     parser.add_argument('--log_dir', type=str, default='./log')
     parser.add_argument('--model_dir', type=str, default='./models')
     parser.add_argument('--policy_path', type=str, default='CarRacingPolicy')

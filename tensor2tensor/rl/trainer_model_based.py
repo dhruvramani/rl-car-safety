@@ -249,7 +249,7 @@ def load_metrics(event_dir, epoch):
   return metrics
 
 
-def training_loop(hparams, output_dir, report_fn=None, report_metric=None):
+def training_loop(env_fn, hparams, output_dir, report_fn=None, report_metric=None):
   """Run the main training loop."""
   if report_fn:
     assert report_metric is not None
@@ -263,8 +263,8 @@ def training_loop(hparams, output_dir, report_fn=None, report_metric=None):
 
   epoch = -1
   data_dir = directories["data"]
-  env = rl_utils.setup_env(
-      hparams, batch_size=hparams.real_batch_size,
+  env = rl_utils.setup_env(env_fn, hparams, 
+      batch_size=hparams.real_batch_size,
       max_num_noops=hparams.max_num_noops,
       rl_env_max_episode_steps=hparams.rl_env_max_episode_steps
   )
@@ -315,14 +315,14 @@ def training_loop(hparams, output_dir, report_fn=None, report_metric=None):
     )
 
     # Train agent
-    log("Training policy in simulated environment.")
-    train_agent(env, learner, directories["world_model"], hparams, epoch)
+    #log("Training policy in simulated environment.")
+    #train_agent(env, learner, directories["world_model"], hparams, epoch)
 
     env.start_new_epoch(epoch, data_dir)
 
     # Train agent on real env (short)
-    log("Training policy in real environment.")
-    train_agent_real_env(env, learner, hparams, epoch)
+    #log("Training policy in real environment.")
+    #train_agent_real_env(env, learner, hparams, epoch)
 
     if hparams.stop_loop_early:
       return 0.0

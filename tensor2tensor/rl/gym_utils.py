@@ -220,6 +220,40 @@ def make_gym_env(name,
                          rendered_env, rendered_env_resize_to, sticky_actions,
                          output_dtype)
 
+def make_gym_env_fn(env_fn, name,
+                 rl_env_max_episode_steps=-1,
+                 maxskip_env=False,
+                 rendered_env=False,
+                 rendered_env_resize_to=None,
+                 sticky_actions=False,
+                 output_dtype=None):
+  """Create a gym env optionally with a time limit and maxskip wrapper.
+
+  NOTE: The returned env may already be wrapped with TimeLimit!
+
+  Args:
+    name: `str` - base name of the gym env to make.
+    rl_env_max_episode_steps: `int` or None - Using any value < 0 returns the
+      env as-in, otherwise we impose the requested timelimit. Setting this to
+      None returns a wrapped env that doesn't have a step limit.
+    maxskip_env: whether to also use MaxAndSkip wrapper before time limit.
+    rendered_env: whether to force render for observations. Use this for
+      environments that are not natively rendering the scene for observations.
+    rendered_env_resize_to: a list of [height, width] to change the original
+      resolution of the native environment render.
+    sticky_actions: whether to use sticky_actions before MaxAndSkip wrapper.
+    output_dtype: numpy datatype that we want the observation to be in, if None
+      this defaults to the env's observation dtype. Useful for TPUs since they
+      don't support uint8 which is a default observation type for a lot of envs.
+
+  Returns:
+    An instance of `gym.Env` or `gym.Wrapper`.
+  """
+  env = env_fn()
+  return gym_env_wrapper(env, rl_env_max_episode_steps, maxskip_env,
+                         rendered_env, rendered_env_resize_to, sticky_actions,
+                         output_dtype)
+
 
 def register_gym_env(class_entry_point, version="v0", kwargs=None):
   """Registers the class in Gym and returns the registered name and the env."""

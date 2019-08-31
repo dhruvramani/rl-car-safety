@@ -286,7 +286,7 @@ def should_apply_max_and_skip_env(hparams):
   return hparams.game != "tictactoe"
 
 
-def setup_env(hparams,
+def setup_env(env_fn, hparams,
               batch_size,
               max_num_noops,
               rl_env_max_episode_steps=-1,
@@ -298,6 +298,7 @@ def setup_env(hparams,
   maxskip_envs = should_apply_max_and_skip_env(hparams)
 
   env = T2TGymEnv(
+      env_fn=env_fn,
       base_env_name=env_name,
       batch_size=batch_size,
       grayscale=hparams.grayscale,
