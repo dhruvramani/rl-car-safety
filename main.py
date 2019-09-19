@@ -45,7 +45,8 @@ def main(config):
             trainer_model_based.training_loop(env_fn, hp, world_model_path)            
         elif(config.world_model_type == "base"):        
             env_model = EnvModel(ob_shape, action_dim)
-            if(not os.path.exists(world_model_path)):
+            if(not os.path.exists(world_model_path) or config.train_world_model):
+                os.mkdir(world_model_path)
                 env_model.train()
 
     if(config.eval_safety):

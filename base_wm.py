@@ -19,6 +19,12 @@ make_env = lambda : CarRacing(
     num_lanes=1,
     num_tracks=1)
 
+# TODO : TRAIN ON MULTIPLE AGENTS
+# TODO : RESET AFTER CERTAIN STEPS
+# TODO : Write testing function for env_model
+# TODO : Write the tree code
+# TODO : Write code for safety check
+
 def inject_additional_input(layer, inputs, name, mode="multi_additive"):
   """Injects the additional input into the layer.
 
@@ -96,7 +102,7 @@ class EnvModel(object):
             self.state_pred, self.reward_pred, _, _ = self.network()
 
         # NOTE - Change this maybe to video_l2_loss
-        self.state_loss = tf.math.maximum(tf.reduce_sum(tf.pow(self.state_pred - self.target_states, 2)), self.l2_clip)
+        self.state_loss = tf.math.maximum(tf.reduce_mean(tf.pow(self.state_pred - self.target_states, 2)), self.l2_clip)
         self.loss = self.state_loss
 
         if(self.has_rewards):
@@ -119,6 +125,8 @@ class EnvModel(object):
             actions = envs.action_space.sample()
             #actions, _, _ = actor_critic.act(states)
             next_states, rewards, dones, _ = envs.step(actions)
+            next_states = next_states.reshape(1, self.width, self.height, self.depth)
+
             yield frame_idx, states, actions, rewards, next_states, dones
             states = next_states
 
@@ -241,12 +249,11 @@ class EnvModel(object):
 
             for idx, states, actions, rewards, next_states, dones in tqdm(
                 self.generate_data(envs, self.max_ep_len, self.n_envs), total=self.max_ep_len):
+                actions = np.array(actions)
+                actions = np.reshape(actions, (-1, 1))
+
                 if(self.has_rewards):
                     target_reward = reward_to_target(rewards)
-                    actions = np.array(actions)
-                    actions = np.reshape(actions, (-1, 1))
-                    print(actions.shape)
-
                     loss, reward_loss, state_loss, summary, _ = sess.run([self.loss, self.reward_loss, self.state_loss,
                         summary_op, self.opt], feed_dict={
                         self.states_ph: states,
@@ -261,10 +268,13 @@ class EnvModel(object):
                         self.target_states: next_states,
                     })
 
-                if frame_idx % self.log_interval == 0:
-                    print('%i => Loss : %.4f, Reward Loss : %.4f, Image Loss : %.4f' % (frame_idx, loss, reward_loss, state_loss))
+                if idx % self.log_interval == 0:
+                    if(self.has_rewards):
+                        print('%i => Loss : %.4f, Reward Loss : %.4f, Image Loss : %.4f' % (idx, loss, reward_loss, state_loss))
+                    else :
+                        print('%i => Loss : %.4f' % (idx, loss))
 
-                train_writer.add_summary(summary, frame_idx)
+                train_writer.add_summary(summary, idx)
 
             saver.save(sess, 'weights/env_model.ckpt')
             print('Environment model saved')
