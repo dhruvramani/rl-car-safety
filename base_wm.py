@@ -8,7 +8,16 @@ from tensor2tensor.layers import common_layers
 from tensor2tensor.layers import common_attention
 from tensor2tensor.layers import common_video
 
-from main import env_fn as make_env
+from tqdm import tqdm
+from utils import SubprocVecEnv
+
+make_env = lambda : CarRacing(
+    grayscale=0,
+    show_info_panel=0,
+    discretize_actions="hard",
+    frames_per_state=1,
+    num_lanes=1,
+    num_tracks=1)
 
 def inject_additional_input(layer, inputs, name, mode="multi_additive"):
   """Injects the additional input into the layer.
@@ -52,16 +61,6 @@ def inject_additional_input(layer, inputs, name, mode="multi_additive"):
 
   return layer
 
-def generate_data(envs, max_ep_len, n_envs):
-    states = envs.reset()
-    for frame_idx in range(max_ep_len):
-        states = states.reshape(-1, nw, nh, nc)
-        actions = [envs.action_space.sample() for _ in range(n_envs)]
-        #actions, _, _ = actor_critic.act(states)
-        next_states, rewards, dones, _ = envs.step(actions)
-        yield frame_idx, states, actions, rewards, next_states, dones
-        states = next_states
-
 class EnvModel(object):
     def __init__(self, obs_shape, action_dim, num_rewards=1, n_envs=16, is_policy=False, has_rewards=False, 
         hidden_size=64, n_layers=6, dropout_p=0.1, activation_fn=tf.nn.relu, max_ep_len=50000,
@@ -70,7 +69,7 @@ class EnvModel(object):
         self.obs_shape = obs_shape
         self.action_dim = action_dim
         self.hidden_size = hidden_size
-        self.n_layers = n_layers
+        self.layers = n_layers
         self.dropout_p = dropout_p
         self.activation_fn = activation_fn
         self.l2_clip = l2_clip
@@ -86,7 +85,8 @@ class EnvModel(object):
         self.width, self.height, self.depth = self.obs_shape
 
         self.states_ph = tf.placeholder(tf.float32, [None, self.width, self.height, self.depth])
-        self.actions_ph = tf.placeholder(tf.float32, [None, self.action_dim])
+        self.actions_ph = tf.placeholder(tf.uint8, [None, 1])
+        self.actions_oph = tf.one_hot(self.actions_ph, depth=action_dim)
         self.target_states = tf.placeholder(tf.float32, [None, self.width, self.height, self.depth])
         if(self.has_rewards):
             self.target_rewards = tf.placeholder(tf.uint8, [None, self.num_rewards])
@@ -107,9 +107,20 @@ class EnvModel(object):
 
         if should_summary:
             tf.summary.scalar('loss', self.loss)
-            tf.summary.scalar('reward_loss', self.reward_loss)
-            tf.summary.scalar('image_loss', self.image_loss)
-        
+            if(self.has_rewards):
+                tf.summary.scalar('image_loss', self.state_loss)
+                tf.summary.scalar('reward_loss', self.reward_loss)
+
+    def generate_data(self, envs, max_ep_len, n_envs):
+        states = envs.reset()
+        for frame_idx in range(max_ep_len):
+            states = states.reshape(1, self.width, self.height, self.depth)
+            #actions = [envs.action_space.sample() for _ in range(n_envs)]
+            actions = envs.action_space.sample()
+            #actions, _, _ = actor_critic.act(states)
+            next_states, rewards, dones, _ = envs.step(actions)
+            yield frame_idx, states, actions, rewards, next_states, dones
+            states = next_states
 
     def network(self):
         def middle_network(layer):
@@ -132,7 +143,7 @@ class EnvModel(object):
 
         filters = self.hidden_size
         kernel2 = (4, 4)
-        action = self.actions_ph#[0] NOTE - might remove this
+        action = self.actions_oph#[0] NOTE - might remove this
 
         # Normalize states. - NOTE might remove the list comprehension
         #states = [common_layers.standardize_images(f) for f in self.states_ph]
@@ -224,13 +235,17 @@ class EnvModel(object):
             train_writer = tf.summary.FileWriter('./env_logs/train/', graph=sess.graph)
             summary_op = tf.summary.merge_all()
 
-            envs = [make_env() for i in range(self.n_envs)]
-            envs = SubprocVecEnv(envs)
+            envs = make_env()
+            #envs = [make_env() for i in range(self.n_envs)]
+            #envs = SubprocVecEnv(envs)
 
             for idx, states, actions, rewards, next_states, dones in tqdm(
-                play_games(envs, self.max_ep_len, self.n_envs), total=self.max_ep_len):
+                self.generate_data(envs, self.max_ep_len, self.n_envs), total=self.max_ep_len):
                 if(self.has_rewards):
                     target_reward = reward_to_target(rewards)
+                    actions = np.array(actions)
+                    actions = np.reshape(actions, (-1, 1))
+                    print(actions.shape)
 
                     loss, reward_loss, state_loss, summary, _ = sess.run([self.loss, self.reward_loss, self.state_loss,
                         summary_op, self.opt], feed_dict={

@@ -8,7 +8,7 @@ from gym.envs.box2d import CarRacing
 from tensor2tensor.rl import trainer_model_based_params
 from tensor2tensor.rl import trainer_model_based
 
-from base_world_model import EnvModel
+from base_wm import EnvModel
 
 env_fn = lambda : CarRacing(
     grayscale=0,
@@ -28,7 +28,10 @@ def main(config):
     env.reset()
     
     ob_shape = env.observation_space.shape
-    action_dim = env.action_space.shape
+    action_dim = 5
+
+    # print(env.action_space.sample())
+    # _ = input(" ")
 
     world_model_path = os.path.expanduser(os.path.join(config.model_dir, config.world_model_type + "_" + config.world_model_path))
 
