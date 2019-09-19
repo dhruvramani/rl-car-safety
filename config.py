@@ -11,21 +11,28 @@ def str2list(v):
         return [v_ for v_ in v.split(',')]
 
 def argparser():
-    parser = argparse.ArgumentParser("Model based safety",
+    parser = argparse.ArgumentParser("Model based safety for autonomous car env",
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 
+    # ------ Env Model --------
+    parser.add_argument('--world_model_type', type=str, default='base', choices=['t2t', 'base'])
     parser.add_argument('--train_world_model', type=str2bool, default=True)
 
+    # ------ Saver Utils -------
     parser.add_argument('--log_dir', type=str, default='./log')
     parser.add_argument('--model_dir', type=str, default='./models')
     parser.add_argument('--policy_path', type=str, default='CarRacingPolicy')
     parser.add_argument('--world_model_path', type=str, default="CarRacingWorldModel")
 
+    # ------ Safety Graph/Tree -------
     parser.add_argument('--eval_safety', type=str2bool, default=True)
     parser.add_argument('--tree_size', type=int, default=10)
+   
+    # ------ Evaluating ------
     parser.add_argument('--total_timesteps', type=int, default=int(1e6))
     parser.add_argument('--max_eval_iters', type=int, default=int(1e3))
     
+    # ------ Utils -------
     parser.add_argument('--render', type=str2bool, default=True, help='Render frames')
     parser.add_argument('--debug', type=str2bool, default=False, help='See debugging info')
 

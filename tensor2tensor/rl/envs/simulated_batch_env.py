@@ -98,7 +98,7 @@ def compute_uncertainty_reward(logits, predictions):
   summed = tf.reduce_sum(neg_log_prob, axis=reduce_dims)
   return summed / 10
 
-
+# NOTE : @dhruvramani - important stuff here
 class SimulatedBatchEnv(in_graph_batch_env.InGraphBatchEnv):
   """Batch of environments inside the TensorFlow graph.
 

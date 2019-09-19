@@ -621,11 +621,11 @@ class T2TGymEnv(T2TEnv):
         for _ in range(self.batch_size)]
 
     # max_num_noops works only with atari envs.
-    if max_num_noops > 0:
-      assert self._envs[0].unwrapped.get_action_meanings()[
-          self.noop_action
-      ] == "NOOP"
-    self.max_num_noops = max_num_noops
+    # if max_num_noops > 0:
+    #   assert self._envs[0].unwrapped.get_action_meanings()[
+    #       self.noop_action
+    #   ] == "NOOP"
+    # self.max_num_noops = max_num_noops
 
     orig_observ_space = self._envs[0].observation_space
     if not all(env.observation_space == orig_observ_space
@@ -673,7 +673,7 @@ class T2TGymEnv(T2TEnv):
         "resize_height_factor": self.resize_height_factor,
         "resize_width_factor": self.resize_width_factor,
         "rl_env_max_episode_steps": self.rl_env_max_episode_steps,
-        "max_num_noops": self.max_num_noops,
+        # "max_num_noops": self.max_num_noops,
         "maxskip_envs": self.maxskip_envs,
     }
     env_kwargs.update(kwargs)
@@ -747,7 +747,7 @@ class T2TGymEnv(T2TEnv):
       obs = reset_with_initial_state(env, index)
       try:
         num_noops = random.randint(1, self.max_num_noops)
-      except ValueError:
+      except :
         num_noops = 0
 
       for _ in range(num_noops):
