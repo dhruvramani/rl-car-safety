@@ -9,15 +9,7 @@ from tensor2tensor.layers import common_attention
 from tensor2tensor.layers import common_video
 
 from tqdm import tqdm
-from utils import SubprocVecEnv
-
-make_env = lambda : CarRacing(
-    grayscale=0,
-    show_info_panel=0,
-    discretize_actions="hard",
-    frames_per_state=1,
-    num_lanes=1,
-    num_tracks=1)
+from utils import SubprocVecEnv, make_env
 
 # TODO : TRAIN ON MULTIPLE AGENTS
 # TODO : RESET AFTER CERTAIN STEPS
@@ -68,25 +60,31 @@ def inject_additional_input(layer, inputs, name, mode="multi_additive"):
   return layer
 
 class EnvModel(object):
-    def __init__(self, obs_shape, action_dim, num_rewards=1, n_envs=16, is_policy=False, has_rewards=False, 
-        hidden_size=64, n_layers=6, dropout_p=0.1, activation_fn=tf.nn.relu, max_ep_len=50000,
-        l2_clip=10.0, softmax_clip=0.03, reward_coeff=0.1, should_summary=True, log_interval=100):
+    def __init__(self, obs_shape, action_dim, config):
         
         self.obs_shape = obs_shape
         self.action_dim = action_dim
-        self.hidden_size = hidden_size
-        self.layers = n_layers
-        self.dropout_p = dropout_p
-        self.activation_fn = activation_fn
-        self.l2_clip = l2_clip
-        self.softmax_clip = softmax_clip
-        self.reward_coeff = reward_coeff
-        self.n_envs = n_envs
-        self.max_ep_len = max_ep_len
-        self.log_interval = log_interval
+        self.config = config
 
-        self.is_policy = is_policy
-        self.has_rewards = has_rewards
+        self.hidden_size = config.hidden_size
+        self.layers = config.n_layers
+        self.dropout_p = config.dropout_p
+        
+        if(config.activation_fn == 'relu'):
+            self.activation_fn = tf.nn.relu
+        elif (config.activation_fn == 'tanh'):
+            self.activation_fn = tf.nn.tanh
+        
+        self.l2_clip = config.l2_clip
+        self.softmax_clip = config.softmax_clip
+        self.reward_coeff = config.reward_coeff
+        self.n_envs = config.n_envs
+        self.max_ep_len = config.max_ep_len
+        self.log_interval = config.log_interval
+
+        self.is_policy = config.is_policy
+        self.has_rewards = config.has_rewards
+        self.num_rewards = config.num_rewards
 
         self.width, self.height, self.depth = self.obs_shape
 
@@ -111,24 +109,27 @@ class EnvModel(object):
 
         self.opt = tf.train.AdamOptimizer().minimize(self.loss)
 
-        if should_summary:
-            tf.summary.scalar('loss', self.loss)
-            if(self.has_rewards):
-                tf.summary.scalar('image_loss', self.state_loss)
-                tf.summary.scalar('reward_loss', self.reward_loss)
+        tf.summary.scalar('loss', self.loss)
+        if(self.has_rewards):
+            tf.summary.scalar('image_loss', self.state_loss)
+            tf.summary.scalar('reward_loss', self.reward_loss)
 
-    def generate_data(self, envs, max_ep_len, n_envs):
+    def generate_data(self, envs):
         states = envs.reset()
-        for frame_idx in range(max_ep_len):
-            states = states.reshape(1, self.width, self.height, self.depth)
-            #actions = [envs.action_space.sample() for _ in range(n_envs)]
-            actions = envs.action_space.sample()
+        for frame_idx in range(self.max_ep_len):
+            states = states.reshape(self.n_envs, self.width, self.height, self.depth)
+            if(self.n_envs == 1):
+                actions = envs.action_space.sample()
+            else:
+                actions = [envs.action_space.sample() for _ in range(self.n_envs)]
             #actions, _, _ = actor_critic.act(states)
             next_states, rewards, dones, _ = envs.step(actions)
-            next_states = next_states.reshape(1, self.width, self.height, self.depth)
+            next_states = next_states.reshape(self.n_envs, self.width, self.height, self.depth)
 
             yield frame_idx, states, actions, rewards, next_states, dones
             states = next_states
+            if(self.n_envs == 1 and dones == True):
+                states = envs.reset()
 
     def network(self):
         def middle_network(layer):
@@ -153,11 +154,12 @@ class EnvModel(object):
         kernel2 = (4, 4)
         action = self.actions_oph#[0] NOTE - might remove this
 
-        # Normalize states. - NOTE might remove the list comprehension
-        #states = [common_layers.standardize_images(f) for f in self.states_ph]
-        #stacked_states = tf.concat(states, axis=-1)
-
-        stacked_states = common_layers.standardize_images(self.states_ph)
+        # Normalize states
+        if(self.n_envs > 1):
+            states = [common_layers.standardize_images(self.states_ph[i, :, :, :]) for i in range(self.n_envs)]
+            stacked_states = tf.stack(states)
+        else:
+            stacked_states = common_layers.standardize_images(self.states_ph)
         inputs_shape = common_layers.shape_list(stacked_states)
 
         # Using non-zero bias initializer below for edge cases of uniform inputs.
@@ -231,7 +233,7 @@ class EnvModel(object):
 
         return x, reward_pred, policy_pred, value_pred
 
-    def train(self):
+    def train(self, world_model_path):
         with tf.Session() as sess:
             sess.run(tf.global_variables_initializer())
 
@@ -243,12 +245,14 @@ class EnvModel(object):
             train_writer = tf.summary.FileWriter('./env_logs/train/', graph=sess.graph)
             summary_op = tf.summary.merge_all()
 
-            envs = make_env()
-            #envs = [make_env() for i in range(self.n_envs)]
-            #envs = SubprocVecEnv(envs)
+            if(self.n_envs == 1):
+                envs = make_env()()
+            else:
+                envs = [make_env() for i in range(self.n_envs)]
+                envs = SubprocVecEnv(envs)
 
             for idx, states, actions, rewards, next_states, dones in tqdm(
-                self.generate_data(envs, self.max_ep_len, self.n_envs), total=self.max_ep_len):
+                self.generate_data(envs), total=self.max_ep_len):
                 actions = np.array(actions)
                 actions = np.reshape(actions, (-1, 1))
 
@@ -273,8 +277,8 @@ class EnvModel(object):
                         print('%i => Loss : %.4f, Reward Loss : %.4f, Image Loss : %.4f' % (idx, loss, reward_loss, state_loss))
                     else :
                         print('%i => Loss : %.4f' % (idx, loss))
+                    saver.save(sess, '{}/env_model.ckpt'.format(world_model_path))
+                    print('Environment model saved')
 
                 train_writer.add_summary(summary, idx)
-
-            saver.save(sess, 'weights/env_model.ckpt')
-            print('Environment model saved')
+            envs.close()
