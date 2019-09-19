@@ -11,11 +11,9 @@ from tensor2tensor.layers import common_video
 from tqdm import tqdm
 from utils import SubprocVecEnv, make_env
 
-# TODO : TRAIN ON MULTIPLE AGENTS
-# TODO : RESET AFTER CERTAIN STEPS
-# TODO : Write testing function for env_model
-# TODO : Write the tree code
 # TODO : Write code for safety check
+# TODO : Move away from T2T
+# TODO : Put WM code on github
 
 def inject_additional_input(layer, inputs, name, mode="multi_additive"):
   """Injects the additional input into the layer.
