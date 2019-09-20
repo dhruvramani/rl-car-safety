@@ -15,6 +15,21 @@ from utils import SubprocVecEnv, make_env
 # TODO : Move away from T2T
 # TODO : Put WM code on github
 
+g_env_model = None
+def get_cache_loaded_env_model(sess, ob_shape, action_dim, config, path):
+    global g_env_model
+    if g_env_model is None:
+        old_val = config.n_envs
+        config.n_envs = 1
+        g_env_model = EnvModel(ob_shape, action_dim, config)
+        save_vars = tf.get_collection(tf.GraphKeys.GLOBAL_VARIABLES, scope='env_model')
+        loader = tf.train.Saver(var_list=save_vars)
+        loader.restore(sess, path)
+        print('World Env model restored')
+        config.n_envs = old_val
+
+    return g_env_model
+
 def inject_additional_input(layer, inputs, name, mode="multi_additive"):
   """Injects the additional input into the layer.
 
@@ -98,7 +113,7 @@ class EnvModel(object):
             self.state_pred, self.reward_pred, _, _ = self.network()
 
         # NOTE - Change this maybe to video_l2_loss
-        self.state_loss = tf.math.maximum(tf.reduce_mean(tf.pow(self.state_pred - self.target_states, 2)), self.l2_clip)
+        self.state_loss = tf.math.maximum(tf.reduce_sum(tf.pow(self.state_pred - self.target_states, 2)), self.l2_clip)
         self.loss = self.state_loss
 
         if(self.has_rewards):
@@ -230,6 +245,15 @@ class EnvModel(object):
           reward_pred = tf.squeeze(reward_pred, axis=1)  # Remove extra dims
 
         return x, reward_pred, policy_pred, value_pred
+
+    def imagine(self, sess, obs, action):
+        action = np.array(action)
+        action = np.reshape(action, (1, 1))
+        obs = obs.reshape(1, self.width, self.height, self.depth)    
+        next_pred_ob = sess.run(self.state_pred, feed_dict={self.states_ph : obs, self.actions_ph : action})
+        next_pred_ob = next_pred_ob.reshape(self.width, self.height, self.depth)
+        next_pred_ob = np.rint(next_pred_ob)
+        return next_pred_ob
 
     def train(self, world_model_path):
         with tf.Session() as sess:

@@ -7,7 +7,20 @@ import logging
 import numpy as np
 from tqdm import tqdm
 import tensorflow as tf
-from base_wm import EnvModel
+from small_network import *
+
+def car_outside(env):
+    right = env.info['count_right'] > 0
+    left  = env.info['count_left']  > 0
+    if (left|right).sum() == 0:
+        return True
+    else:
+        return False
+
+def change_state(env, car_state):
+    env.car.hull.position[0], env.car.hull.position[1], env.car.hull.angle, env.car.hull.linearVelocity[0], env.car.hull.linearVelocity[1] = car_state
+    new_obs = env.render("state_pixels")
+    env._update_state(new_obs)
 
 class ImaginedNode(object):
     def __init__(self, imagined_state, imagined_reward=None):
@@ -18,62 +31,44 @@ class ImaginedNode(object):
     def add_child(self, obj):
         self.children.append(obj)
 
-def car_outside(env):
-    right = env.info['count_right'] > 0
-    left  = env.info['count_left']  > 0
-    if (left|right).sum() == 0:
-        return True
-    else:
-        return False
-
-def imagine(sess, world_model, obs, action):
-    action = np.array(action)
-    action = np.reshape(action, (1, 1))
-    obs = obs.reshape(1, world_model.width, world_model.height, world_model.depth)    
-    next_pred_ob = sess.run(world_model.state_pred, feed_dict={world_model.states_ph : obs, world_model.actions_ph : action})
-    next_pred_ob = next_pred_ob.reshape(world_model.width, world_model.height, world_model.depth)
-    return next_pred_ob
-
 # TODO : Make changes
-def search_node(root, base_state):
+def is_unsafe(root, env):
     if(root is not None):
-        #print(root.imagined_state.reshape(nc, nw, nh))
-        imagined_state = copy.deepcopy(root.imagined_state)
-        imagined_state = imagined_state.reshape(nc, nw, nh)
-        #imagined_state[np.where(imagined_state == 2.0)] = 1.0
-        if(np.array_equal(imagined_state, base_state) and root.imagined_reward != END_REWARD):
+        imagined_state = root.imagined_state
+        change_state(env, imagined_state)
+        
+        if(car_outside(env) == True):
             return True
+        
+        unsafe_founds = []
         for child in root.children:
-            found = search_node(child, base_state)
-            if(found == True):
-                return found
+            found = search_node(child, env)
+            unsafe_founds.append(found)
+        
+        if(False not in unsafe_founds):
+            return True
     return False
 
-def generate_tree(sess, state, config, world_model, count=0):
-    nw, nh, nc = world_model.width, world_model.height, world_model.depth
-    action_dim = world_model.action_dim
-
-    state = state.reshape(nw, nh, nc)
+def generate_tree(state, config, env, count=0):
+    action_dim = 5
     node = ImaginedNode(state)
     if(count > config.tree_size):
         node.children.extend([None for i in range(action_dim)])
         return node
 
+    init_state = state
     for action in range(action_dim):
-        imagined_state = imagine(sess, world_model, state, action)
-        if(np.array_equal(state, imagined_state)):
+        obs, _, _, _ = env.step(action)
+        state = [env.car.hull.position[0], env.car.hull.position[1], env.car.hull.angle, env.car.hull.linearVelocity[0], env.car.hull.linearVelocity[1]]
+        if(False not in [state[i] == init_state[i] for i in range(len(state))]):
             node.add_child(None)
             continue
-        node.add_child(generate_tree(sess, imagined_state, config, world_model, count + 1))
-
+        node.add_child(generate_tree(state, config, env, count + 1))
+        change_state(env, init_state)
     return node
 
-def safe_action(agent, tree, base_state, unsafe_action, world_model):
-    possible_actions = [i for i in range(world_model.action_dim) if i != unsafe_action]
-    imagined_states =  {a : tree.children[a].imagined_state for a in possible_actions if search_node(tree.children[a], base_state) == True}
-    values = {a : agent.critique(imagined_states[a].reshape(1, nw, nh, nc)) for a in imagined_states.keys()}
-    max_a = max(values.keys(), key=lambda a:values[a])
-    return [max_a]
+def move_node(root, action):
+    return root.children[action]
 
 def get_node(root, state):
     #state = state.reshape(nc, nw, nh)
@@ -92,3 +87,11 @@ def get_node(root, state):
             if(child is not None):
                 queue.append(child)
     return None
+
+
+def safe_action(agent, tree, base_state, unsafe_action, world_model):
+    possible_actions = [i for i in range(world_model.action_dim) if i != unsafe_action]
+    imagined_states =  {a : tree.children[a].imagined_state for a in possible_actions if search_node(tree.children[a], base_state) == True}
+    values = {a : agent.critique(imagined_states[a].reshape(1, nw, nh, nc)) for a in imagined_states.keys()}
+    max_a = max(values.keys(), key=lambda a:values[a])
+    return [max_a]

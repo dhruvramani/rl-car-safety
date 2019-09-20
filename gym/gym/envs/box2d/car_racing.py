@@ -247,6 +247,7 @@ class FrictionDetector(contactListener):
 
                 #self.env.reward_tiles.add(tile)
                 if tile.lane == 1:
+                    # NOTE : Look
                     self.env.info['count_right'][tile.id] += 1
                     self.env.info['count_right_delay'][tile.id] += 1
                 else:
@@ -1742,7 +1743,7 @@ class CarRacing(gym.Env, EzPickle):
                 color=(255,255,255,255))
             self.transform = rendering.Transform()
             
-            self.viewer.window.on_key_press = self._key_press
+            self.viewer.window.on_key_press = self._key_pressk
             self.viewer.window.on_key_release = self._key_release
         if "t" not in self.__dict__: return  # reset() not called yet
 
