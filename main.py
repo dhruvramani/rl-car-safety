@@ -102,19 +102,20 @@ def evaluate_agent(env, config, policy=None, safety_graph=None, path=None):
     obs = env.reset()
     state = [env.car.hull.position[0], env.car.hull.position[1], env.car.hull.angle, env.car.hull.linearVelocity[0], env.car.hull.linearVelocity[1]]
     tree = generate_tree(state, config, env)
-    for t in range(config.max_eval_iters):
+    for t in range(1, config.max_eval_iters):
         if(t % 2 == 0):
             action = 1
         else:
             action = 2
         state = [env.car.hull.position[0], env.car.hull.position[1], env.car.hull.angle, env.car.hull.linearVelocity[0], env.car.hull.linearVelocity[1]]
         if(t % config.tree_size == 0):
-            _ = input("Generating diff tree - press to continue")
+            print("Generating diff tree")
             tree = generate_tree(state, config, env)
 
         next_node = move_node(tree, action)
         if(is_unsafe(next_node, env)):
             print("Unsafe action")
+        print(action)
         obs, reward, dones, info = env.step(action)
         env.render()
 

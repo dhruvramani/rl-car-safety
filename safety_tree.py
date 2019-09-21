@@ -42,7 +42,7 @@ def is_unsafe(root, env):
         
         unsafe_founds = []
         for child in root.children:
-            found = search_node(child, env)
+            found = is_unsafe(child, env)
             unsafe_founds.append(found)
         
         if(False not in unsafe_founds):
