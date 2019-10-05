@@ -46,7 +46,7 @@ def argparser():
 
     # ------ Safety Graph/Tree -------
     parser.add_argument('--eval_world_model', type=str2bool, default=False)
-    parser.add_argument('--eval_safety', type=str2bool, default=True)
+    parser.add_argument('--eval_safety', type=str2bool, default=False)
     parser.add_argument('--tree_size', type=int, default=5)
    
     # ------ Evaluating ------

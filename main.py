@@ -1,6 +1,7 @@
 import os
 import gym
 import copy
+import random
 import numpy as np
 import tensorflow as tf
 
@@ -17,6 +18,10 @@ from safety_tree import *
 import multiprocessing as mp
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+
+from stable_baselines.common.policies import CnnPolicy
+from stable_baselines.common.vec_env import DummyVecEnv
+from stable_baselines import PPO2
 
 # NOTE : At every Kth step, create a new tree with K time steps 
 #       and check if it leads to a state in which 
@@ -53,15 +58,52 @@ def main(config):
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        if(config.eval_world_model):
-            if(config.world_model_type == "small"):
-                env_model = small_network.get_cache_loaded_env_model(sess, 5, action_dim, config, world_model_path + '/small_env_model.ckpt')
-            elif(config.world_model_type == "base"):        
-                env_model = base_wm.get_cache_loaded_env_model(sess, ob_shape, action_dim, config, world_model_path + '/env_model.ckpt')
-            evaluate_world_model(env, sess, env_model, config)        
+        plot_preds(env, sess, config, safety=True)
+        # if(config.eval_world_model):
+        #     if(config.world_model_type == "small"):
+        #         env_model = small_network.get_cache_loaded_env_model(sess, 5, action_dim, config, world_model_path + '/small_env_model.ckpt')
+        #     elif(config.world_model_type == "base"):        
+        #         env_model = base_wm.get_cache_loaded_env_model(sess, ob_shape, action_dim, config, world_model_path + '/env_model.ckpt')
+        #     evaluate_world_model(env, sess, env_model, config)        
 
-        if(config.eval_safety):
-            evaluate_agent(env, config)
+        # if(config.eval_safety):
+        #     evaluate_agent(env, config)
+
+
+def plot_preds(env, sess, config, world_model=None, safety=True):
+    with open("./unsafe_state_count_{}.txt".format(safety), "w+") as f:
+        pass
+    for _ in range(200):
+        unsafe_state_count = 0
+        dones = False
+        obs = env.reset()
+        if(safety):
+            state = [env.car.hull.position[0], env.car.hull.position[1], env.car.hull.angle, env.car.hull.linearVelocity[0], env.car.hull.linearVelocity[1]]
+            tree = generate_tree(state, config, env)
+        for t in range(1, 301):
+            action = random.randint(1, 3)
+            #env.render()
+            next_node = move_node(tree, action-1)
+            if(next_node is None ):
+                print("Generating diff tree")
+                tree = generate_tree(state, config, env)
+                next_node = tree
+            if(is_unsafe(next_node, env)):
+                print("Unsafe state")
+                for _ in range(5):
+                    obs, reward, dones, info = env.step(4)
+                obs, reward, dones, info = env.step(0)
+                tree = generate_tree(state, config, env)
+
+            obs, reward, dones, info = env.step(action)
+            tree = next_node
+            #env.render()
+            if(car_outside(env)):
+                unsafe_state_count += 1
+
+        print("Episode done")
+        with open("./unsafe_state_count_{}.txt".format(safety), "a+") as f:
+            f.write("{}\n".format(unsafe_state_count))
 
 def evaluate_world_model(env, sess, world_model, config, policy=None):
     printstar("Testing World Model")
@@ -123,7 +165,6 @@ def debug_test(env, config):
     printstar("Debug")
     obs = env.reset()
     init_car = [env.car.hull.position[0], env.car.hull.position[1], env.car.hull.angle, env.car.hull.linearVelocity[0], env.car.hull.linearVelocity[1]]#, env.info]
-    print(init_car[3][0])
     obs, reward, dones, info = env.step(1)
     for _ in range(100):
         obs, reward, dones, info = env.step(1)

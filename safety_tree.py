@@ -43,10 +43,9 @@ def is_unsafe(root, env):
         unsafe_founds = []
         for child in root.children:
             found = is_unsafe(child, env)
-            unsafe_founds.append(found)
-        
-        if(False not in unsafe_founds):
-            return True
+            if(found == True):
+                return found
+
     return False
 
 def generate_tree(state, config, env, count=0):
@@ -57,7 +56,8 @@ def generate_tree(state, config, env, count=0):
         return node
 
     init_state = state
-    for action in range(action_dim):
+    change_state(env, init_state)
+    for action in range(1, action_dim-1):
         obs, _, _, _ = env.step(action)
         state = [env.car.hull.position[0], env.car.hull.position[1], env.car.hull.angle, env.car.hull.linearVelocity[0], env.car.hull.linearVelocity[1]]
         if(False not in [state[i] == init_state[i] for i in range(len(state))]):
@@ -65,6 +65,7 @@ def generate_tree(state, config, env, count=0):
             continue
         node.add_child(generate_tree(state, config, env, count + 1))
         change_state(env, init_state)
+    change_state(env, init_state)
     return node
 
 def move_node(root, action):
